@@ -17,19 +17,27 @@ _depends=(
 	sh
 	xdg-utils # xdg-open.sh
 )
+makedepends=(
+	patchelf
+)
 source_x86_64=("https://download.disigcdn.sk/cdn/products/websigner2/disig-web-signer_${_pkgver}_amd64.deb")
 sha256sums_x86_64=('9a13879952399321889c59cef13404d588cab1c154505dd6f62e3c638e493e37')
 options=("!debug" "!strip")
 
-declare -gA _soname_depends=(
+declare -gA _makedepends=(
+	["libxml2"]="libxml2.so"
+)
+declare -gA _checkdepends=(
 	["libgcc"]="libgcc_s.so"
 	["libstdc++"]="libstdc++.so"
-	["libxml2-legacy"]="libxml2.so"
 	["openssl"]="libcrypto.so libssl.so"
 )
 checkdepends=(
 	"${_depends[@]}"
-	"${!_soname_depends[@]}"
+	"${!_checkdepends[@]}"
+)
+makedepends+=(
+	"${!_makedepends[@]}"
 )
 
 : "${arch[@]}"
@@ -46,12 +54,20 @@ prepare() {
 	rm -rf "${pkgname}_${_pkgver}"
 	mkdir "${pkgname}_${_pkgver}"
 
+	cd "${pkgname}_${_pkgver}"
+
 	bsdtar \
-		--directory "${pkgname}_${_pkgver}" \
-		--file data.tar.zst \
+		--directory . \
+		--file ../data.tar.zst \
 		`# The libraries are provided by the system.` \
 		--exclude=opt/disig/websigner/{bin/qt.conf,"lib/*","plugins/*","share/doc/*/*"} \
 		--extract
+
+	local libxml2_soname
+	libxml2_soname=$(patchelf --print-soname /usr/lib/libxml2.so)
+	patchelf \
+		--replace-needed libxml2.so.2 "${libxml2_soname}" \
+		opt/disig/websigner/bin/WebSignerPkcs11
 }
 
 check() {
@@ -71,7 +87,8 @@ package() {
 	# shellcheck disable=SC2206
 	depends=(
 		"${_depends[@]}"
-		${_soname_depends[@]}
+		${_checkdepends[@]}
+		${_makedepends[@]}
 	)
 	optdepends=(
 		"gnome-shell-extension-appindicator: for system tray icon on GNOME"
